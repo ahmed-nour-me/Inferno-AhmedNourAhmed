@@ -1,0 +1,67 @@
+# GitHub Actions Workflow for Inferno - Bootable USB Creator
+# Developed by Ahmed Nour Ahmed
+# This workflow builds the Inferno application for Windows using CMake and Qt6.
+
+name: Inferno Windows Builder
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Set up MSVC Environment
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: 6.x
+        host: windows
+        target: desktop
+        arch: win64_msvc
+        dir: ${{ runner.temp }}/Qt
+        
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ runner.temp }}/Qt/6.x/msvc2019_64"
+
+    - name: Build Inferno
+      run: cmake --build build --config Release
+
+    - name: Deploy Qt Dependencies (windeployqt)
+      run: |
+        # Find the windeployqt tool path
+        $qt_bin_path = "${{ runner.temp }}/Qt/6.x/msvc2019_64/bin"
+        $windeployqt_path = Join-Path $qt_bin_path "windeployqt.exe"
+        
+        # Run windeployqt on the executable to bundle necessary Qt DLLs
+        & $windeployqt_path --dir build/bin/Release build/bin/Release/Inferno.exe
+      shell: powershell
+
+    - name: Create Portable Archive
+      run: |
+        cd build/bin/Release
+        # Create a zip file containing the executable and all bundled DLLs
+        Compress-Archive -Path * -DestinationPath ../../../Inferno-v1.0.0-Win64.zip
+      shell: powershell
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Inferno-Windows-Release
+        path: Inferno-v1.0.0-Win64.zip
+        retention-days: 7
